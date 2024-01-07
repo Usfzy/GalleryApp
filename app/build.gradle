@@ -63,4 +63,6 @@ dependencies {
 
     // COIL Image loading
     implementation 'io.coil-kt:coil:2.0.0-rc02'
+    //Datastore
+    implementation 'androidx.datastore:datastore-preferences:1.0.0'
 }

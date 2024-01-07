@@ -75,7 +75,13 @@ class PhotoGalleryFragment : Fragment(), MenuProvider {
     }
 
     override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        return false
+        return when (menuItem.itemId) {
+            R.id.menu_item_clear -> {
+                photoGalleryViewModel.setQuery("")
+                return true
+            }
+            else -> false
+        }
     }
 
     override fun onDestroyView() {

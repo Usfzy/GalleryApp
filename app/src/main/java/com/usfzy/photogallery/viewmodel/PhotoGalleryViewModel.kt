@@ -5,35 +5,40 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.usfzy.photogallery.model.GalleryItem
 import com.usfzy.photogallery.repository.PhotoRepository
+import com.usfzy.photogallery.repository.PreferenceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class PhotoGalleryViewModel : ViewModel() {
     private val photoRepository = PhotoRepository()
+    private val preferenceRepository = PreferenceRepository.get()
 
     private val _galleryItems: MutableStateFlow<List<GalleryItem>> = MutableStateFlow(emptyList())
     val galleryItems: StateFlow<List<GalleryItem>> get() = _galleryItems.asStateFlow()
 
     init {
         viewModelScope.launch {
-            try {
-                val items = fetchGalleryItems("cars")
-                _galleryItems.value = items
-            } catch (ex: Exception) {
-                Log.d(TAG, "EXCEPTION: ${ex.localizedMessage} ")
+            preferenceRepository.storedQuery.collectLatest {
+                try {
+                    val items = fetchGalleryItems(it)
+                    _galleryItems.value = items
+                } catch (ex: Exception) {
+                    Log.d(TAG, "EXCEPTION: ${ex.localizedMessage} ")
+                }
             }
         }
     }
 
     fun setQuery(query: String) {
         viewModelScope.launch {
-            _galleryItems.value = photoRepository.searchPhotos(query)
+            preferenceRepository.setStoredQuery(query)
         }
     }
 
-    suspend fun fetchGalleryItems(query: String): List<GalleryItem> {
+    private suspend fun fetchGalleryItems(query: String): List<GalleryItem> {
         return if (query.isEmpty()) photoRepository.fetchPhotos()
         else photoRepository.searchPhotos(query)
     }
