@@ -10,26 +10,49 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class PhotoGalleryViewModel : ViewModel() {
     private val photoRepository = PhotoRepository()
     private val preferenceRepository = PreferenceRepository.get()
 
-    private val _galleryItems: MutableStateFlow<List<GalleryItem>> = MutableStateFlow(emptyList())
-    val galleryItems: StateFlow<List<GalleryItem>> get() = _galleryItems.asStateFlow()
+    private val _uiState: MutableStateFlow<PhotoGalleryUiState> = MutableStateFlow(
+        PhotoGalleryUiState()
+    )
+    val uiState: StateFlow<PhotoGalleryUiState> get() = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            preferenceRepository.storedQuery.collectLatest {
+            preferenceRepository.storedQuery.collectLatest { storedQuery ->
                 try {
-                    val items = fetchGalleryItems(it)
-                    _galleryItems.value = items
+                    val items = fetchGalleryItems(storedQuery)
+                    _uiState.update {
+                        it.copy(
+                            image = items,
+                            query = storedQuery
+                        )
+                    }
                 } catch (ex: Exception) {
                     Log.d(TAG, "EXCEPTION: ${ex.localizedMessage} ")
                 }
             }
         }
+
+        viewModelScope.launch {
+            preferenceRepository.isPolling.collect { isPolling ->
+                _uiState.update {
+                    it.copy(isPolling = isPolling)
+                }
+            }
+        }
+    }
+
+    fun toggleIsPolling() {
+        viewModelScope.launch {
+            preferenceRepository.setPolling(!uiState.value.isPolling)
+        }
+
     }
 
     fun setQuery(query: String) {
@@ -47,3 +70,9 @@ class PhotoGalleryViewModel : ViewModel() {
         private const val TAG = "PhotoGalleryViewModel"
     }
 }
+
+data class PhotoGalleryUiState(
+    val image: List<GalleryItem> = listOf(),
+    val query: String = "",
+    val isPolling: Boolean = false,
+)

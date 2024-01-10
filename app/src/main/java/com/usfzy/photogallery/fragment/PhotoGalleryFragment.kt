@@ -17,8 +17,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequest
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.usfzy.photogallery.R
 import com.usfzy.photogallery.adapter.PhotoGalleryAdapter
@@ -26,6 +27,7 @@ import com.usfzy.photogallery.databinding.FragmentPhotoGalleryBinding
 import com.usfzy.photogallery.viewmodel.PhotoGalleryViewModel
 import com.usfzy.photogallery.worker.PollWorker
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class PhotoGalleryFragment : Fragment(), MenuProvider {
 
@@ -36,21 +38,7 @@ class PhotoGalleryFragment : Fragment(), MenuProvider {
         }
 
     private val photoGalleryViewModel: PhotoGalleryViewModel by viewModels()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.UNMETERED)
-            .build()
-
-        val workRequest = OneTimeWorkRequest
-            .Builder(PollWorker::class.java)
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(requireContext()).enqueue(workRequest)
-    }
+    private var pollingMenuItem: MenuItem? = null
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -69,8 +57,9 @@ class PhotoGalleryFragment : Fragment(), MenuProvider {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                photoGalleryViewModel.galleryItems.collect {
-                    binding.photoGrid.adapter = PhotoGalleryAdapter(it)
+                photoGalleryViewModel.uiState.collect { state ->
+                    binding.photoGrid.adapter = PhotoGalleryAdapter(state.image)
+                    updatePollingState(state.isPolling)
                 }
             }
         }
@@ -81,6 +70,8 @@ class PhotoGalleryFragment : Fragment(), MenuProvider {
 
         val searchItem: MenuItem = menu.findItem(R.id.menu_item_search)
         val searchView = searchItem.actionView as SearchView
+
+        pollingMenuItem = menu.findItem(R.id.menu_item_toggle_polling)
 
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextChange(newText: String?): Boolean {
@@ -98,10 +89,42 @@ class PhotoGalleryFragment : Fragment(), MenuProvider {
         return when (menuItem.itemId) {
             R.id.menu_item_clear -> {
                 photoGalleryViewModel.setQuery("")
-                return true
+                true
+            }
+
+            R.id.menu_item_toggle_polling -> {
+                photoGalleryViewModel.toggleIsPolling()
+                true
             }
 
             else -> false
+        }
+    }
+
+    private fun updatePollingState(isPolling: Boolean) {
+        val toggleItemTitle = if (isPolling)
+            R.string.stop_polling else R.string.start_polling
+
+        pollingMenuItem?.setTitle(toggleItemTitle)
+
+        if (isPolling) {
+
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED)
+                .build()
+
+            val periodicWorkRequest =
+                PeriodicWorkRequestBuilder<PollWorker>(15, TimeUnit.MINUTES)
+                    .setConstraints(constraints)
+                    .build()
+
+            WorkManager.getInstance(requireContext()).enqueueUniquePeriodicWork(
+                POLL_WORK,
+                ExistingPeriodicWorkPolicy.KEEP,
+                periodicWorkRequest
+            )
+        } else {
+            WorkManager.getInstance(requireContext()).cancelUniqueWork(POLL_WORK)
         }
     }
 
@@ -109,9 +132,11 @@ class PhotoGalleryFragment : Fragment(), MenuProvider {
         super.onDestroyView()
 
         _binding = null
+        pollingMenuItem = null
     }
 
     companion object {
         private const val TAG = "PhotoGalleryFragment"
+        private const val POLL_WORK = "POLL_WORK"
     }
 }

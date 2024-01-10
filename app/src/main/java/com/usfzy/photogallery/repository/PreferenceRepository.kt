@@ -33,15 +33,15 @@ class PreferenceRepository private constructor(
         dataStore.edit {
             it[PREF_LAST_RESULT_ID] = lastResultId
         }
+    }
 
-        val isPolling: Flow<Boolean> = dataStore.data.map {
-            it[PREF_IS_POLLING] ?: false
-        }
+    val isPolling: Flow<Boolean> = dataStore.data.map {
+        it[PREF_IS_POLLING] ?: false
+    }
 
-        suspend fun setPolling(isPolling: Boolean) {
-            dataStore.edit {
-                it[PREF_IS_POLLING] = isPolling
-            }
+    suspend fun setPolling(isPolling: Boolean) {
+        dataStore.edit {
+            it[PREF_IS_POLLING] = isPolling
         }
     }
 
